@@ -82,7 +82,9 @@
 ;;; Require
 (require 'subr-x)
 (require 'thingatpt)
-(require 'tree-sitter)
+(if (> emacs-major-version 28)
+    (require 'treesit)
+  (require 'tree-sitter))
 
 ;;; Code:
 
@@ -415,7 +417,7 @@ When in comment, kill to the beginning of the line."
         (backward-char 1))
       ;; Jump to start position of parent node.
       (unless (grammatical-edit-is-lisp-mode-p)
-        (goto-char (tsc-node-start-position (tsc-get-parent (tree-sitter-node-at-pos))))))
+        (goto-char (treesit-node-start (treesit-node-at (point))))))
 
     ;; Forward char if cursor not between in nested round.
     (when not-between-in-round
@@ -497,9 +499,9 @@ When in comment, kill to the beginning of the line."
 
 (defun grammatical-edit-jump-left ()
   (interactive)
-  (let* ((current-node (tree-sitter-node-at-pos))
-         (prev-node (tsc-get-prev-sibling current-node))
-         (current-node-text (tsc-node-text current-node))
+  (let* ((current-node (treesit-node-at (point)))
+         (prev-node (treesit-node-prev-sibling current-node))
+         (current-node-text (treesit-node-text current-node))
          (current-point (point)))
     (cond
      ;; Skip blank space.
@@ -514,29 +516,29 @@ When in comment, kill to the beginning of the line."
 
      ;; Jump to previous open char.
      ((and (eq major-mode 'web-mode)
-           (eq (tsc-node-type current-node) 'raw_text))
+           (eq (treesit-node-type current-node) 'raw_text))
       (backward-char 1)
       (while (not (looking-at "\\(['\"<({]\\|[[]\\)")) (backward-char 1)))
 
      ;; Jump out string if in string.
      ((grammatical-edit-in-string-p)
-      (goto-char (tsc-node-start-position current-node)))
+      (goto-char (treesit-node-start current-node)))
 
      ;; Jump to node start position if current node exist.
      ((> (length current-node-text) 0)
-      (goto-char (tsc-node-start-position current-node))
+      (goto-char (treesit-node-start current-node))
       (if (equal (point) current-point)
           (backward-char 1)))
 
      ;; Otherwise, jump to start position of previous node.
      (prev-node
-      (goto-char (tsc-node-start-position prev-node))))))
+      (goto-char (treesit-node-start prev-node))))))
 
 (defun grammatical-edit-jump-right ()
   (interactive)
-  (let* ((current-node (tree-sitter-node-at-pos))
-         (next-node (tsc-get-next-sibling current-node))
-         (current-node-text (tsc-node-text current-node))
+  (let* ((current-node (treesit-node-at (point)))
+         (next-node (treesit-node-next-sibling current-node))
+         (current-node-text (treesit-node-text current-node))
          (current-point (point)))
     (cond
      ;; Skip blank space.
@@ -555,23 +557,23 @@ When in comment, kill to the beginning of the line."
 
      ;; Jump to next close char.
      ((and (eq major-mode 'web-mode)
-           (eq (tsc-node-type current-node) 'raw_text))
+           (eq (treesit-node-type current-node) 'raw_text))
       (while (not (looking-at "\\(['\">)}]\\|]\\)")) (forward-char 1))
       (forward-char 1))
 
      ;; Jump out string if in string.
      ((grammatical-edit-in-string-p)
-      (goto-char (tsc-node-end-position current-node)))
+      (goto-char (treesit-node-end current-node)))
 
      ;; Jump to node end position if current node exist.
      ((> (length current-node-text) 0)
-      (goto-char (tsc-node-end-position current-node))
+      (goto-char (treesit-node-end current-node))
       (if (equal (point) current-point)
           (forward-char 1)))
 
      ;; Otherwise, jump to end position of next node.
      (next-node
-      (goto-char (tsc-node-end-position next-node))))))
+      (goto-char (treesit-node-end next-node))))))
 
 (defun grammatical-edit-delete-whitespace-around-cursor ()
   (grammatical-edit-delete-region (save-excursion
@@ -615,33 +617,33 @@ When in comment, kill to the beginning of the line."
               (eq (char-after) ?`))
          (forward-char 1))
         (t
-         (forward-char (length (tsc-node-text (tree-sitter-node-at-pos)))))))
+         (forward-char (length (treesit-node-text (treesit-node-at (point))))))))
 
 (defun grammatical-edit-is-string-node-p (current-node)
-  (or (eq (tsc-node-type current-node) 'string)
-      (eq (tsc-node-type current-node) 'string_literal)
-      (eq (tsc-node-type current-node) 'interpreted_string_literal)
-      (eq (tsc-node-type current-node) 'raw_string_literal)
-      (string-equal (tsc-node-type current-node) "\"")))
+  (or (eq (treesit-node-type current-node) 'string)
+      (eq (treesit-node-type current-node) 'string_literal)
+      (eq (treesit-node-type current-node) 'interpreted_string_literal)
+      (eq (treesit-node-type current-node) 'raw_string_literal)
+      (string-equal (treesit-node-type current-node) "\"")))
 
 (defun grammatical-edit-in-empty-backquote-string-p ()
-  (let ((current-node (tree-sitter-node-at-pos)))
+  (let ((current-node (treesit-node-at (point))))
     (and (grammatical-edit-is-string-node-p current-node)
-         (string-equal (tsc-node-text current-node) "``")
+         (string-equal (treesit-node-text current-node) "``")
          (eq (char-before) ?`)
          (eq (char-after) ?`)
          )))
 
 (defun grammatical-edit-get-parent-bound-info ()
-  (let* ((current-node (tree-sitter-node-at-pos))
-         (parent-node (tsc-get-parent current-node))
-         (parent-bound-start (tsc-node-text (save-excursion
-                                              (goto-char (tsc-node-start-position parent-node))
-                                              (tree-sitter-node-at-pos))))
-         (parent-bound-end (tsc-node-text (save-excursion
-                                            (goto-char (tsc-node-end-position parent-node))
+  (let* ((current-node (treesit-node-at (point)))
+         (parent-node (treesit-node-parent current-node))
+         (parent-bound-start (treesit-node-text (save-excursion
+                                              (goto-char (treesit-node-start parent-node))
+                                              (treesit-node-at (point)))))
+         (parent-bound-end (treesit-node-text (save-excursion
+                                            (goto-char (treesit-node-end parent-node))
                                             (backward-char 1)
-                                            (tree-sitter-node-at-pos)))))
+                                            (treesit-node-at (point))))))
     (list current-node parent-node parent-bound-start parent-bound-end)))
 
 (defun grammatical-edit-in-empty-string-p ()
@@ -651,9 +653,9 @@ When in comment, kill to the beginning of the line."
              (string-bound-start (nth 2 parent-bound-info))
              (string-bound-end (nth 3 parent-bound-info)))
         (and (grammatical-edit-is-string-node-p current-node)
-             (= (length (tsc-node-text parent-node)) (+ (length string-bound-start) (length string-bound-end)))
+             (= (length (treesit-node-text parent-node)) (+ (length string-bound-start) (length string-bound-end)))
              ))
-      (string-equal (tsc-node-text (tree-sitter-node-at-pos)) "\"\"")))
+      (string-equal (treesit-node-text (treesit-node-at (point))) "\"\"")))
 
 (defun grammatical-edit-backward-delete-in-string ()
   (cond
@@ -666,19 +668,19 @@ When in comment, kill to the beginning of the line."
    ((grammatical-edit-after-open-quote-p)
     (backward-char (length (save-excursion
                              (backward-char 1)
-                             (tsc-node-text (tree-sitter-node-at-pos))))))
+                             (treesit-node-text (treesit-node-at (point)))))))
    ;; Delete previous character.
    (t
     (backward-delete-char 1))))
 
 (defun grammatical-edit-delete-empty-string ()
-  (cond ((string-equal (tsc-node-text (tree-sitter-node-at-pos)) "\"\"")
+  (cond ((string-equal (treesit-node-text (treesit-node-at (point))) "\"\"")
          (grammatical-edit-delete-region (- (point) 1) (+ (point) 1)))
         (t
-         (let* ((current-node (tree-sitter-node-at-pos))
+         (let* ((current-node (treesit-node-at (point)))
                 (node-bound-length (save-excursion
-                                     (goto-char (tsc-node-start-position current-node))
-                                     (length (tsc-node-text (tree-sitter-node-at-pos))))))
+                                     (goto-char (treesit-node-start current-node))
+                                     (length (treesit-node-text (treesit-node-at (point)))))))
            (grammatical-edit-delete-region (- (point) node-bound-length) (+ (point) node-bound-length))))))
 
 (defun grammatical-edit-delete-empty-backquote-string ()
@@ -690,11 +692,11 @@ When in comment, kill to the beginning of the line."
                                     (point))))
 
 (defun grammatical-edit-forward-delete-in-string ()
-  (let* ((current-node (tree-sitter-node-at-pos))
+  (let* ((current-node (treesit-node-at (point)))
          (node-bound-length (save-excursion
-                              (goto-char (tsc-node-start-position current-node))
-                              (length (tsc-node-text (tree-sitter-node-at-pos))))))
-    (unless (eq (point) (- (tsc-node-end-position current-node) node-bound-length))
+                              (goto-char (treesit-node-start current-node))
+                              (length (treesit-node-text (treesit-node-at (point)))))))
+    (unless (eq (point) (- (treesit-node-end current-node) node-bound-length))
       (delete-char 1))))
 
 (defun grammatical-edit-unwrap-string (argument)
@@ -806,29 +808,29 @@ When in comment, kill to the beginning of the line."
                                     (point))))
 
 (defun grammatical-edit-at-raw-string-begin-p ()
-  (let ((current-node (tree-sitter-node-at-pos)))
+  (let ((current-node (treesit-node-at (point))))
     (and (grammatical-edit-is-string-node-p current-node)
-         (= (point) (1+ (tsc-node-start-position current-node)))
+         (= (point) (1+ (treesit-node-start current-node)))
          (or (eq (char-before) ?R)
              (eq (char-before) ?r)
              ))))
 
 (defun grammatical-edit-kill-after-in-string ()
-  (if (let ((current-node (tree-sitter-node-at-pos)))
+  (if (let ((current-node (treesit-node-at (point))))
         (and (grammatical-edit-is-string-node-p current-node)
-             (> (point) (tsc-node-start-position current-node))))
+             (> (point) (treesit-node-start current-node))))
       (let* ((parent-bound-info (grammatical-edit-get-parent-bound-info))
              (current-node (nth 0 parent-bound-info))
-             (current-node-bound-end (tsc-node-text (save-excursion
-                                                      (goto-char (tsc-node-end-position current-node))
+             (current-node-bound-end (treesit-node-text (save-excursion
+                                                      (goto-char (treesit-node-end current-node))
                                                       (backward-char 1)
-                                                      (tree-sitter-node-at-pos)))))
+                                                      (treesit-node-at (point))))))
         (cond ((grammatical-edit-at-raw-string-begin-p)
-               (grammatical-edit-delete-region (tsc-node-start-position current-node) (tsc-node-end-position current-node)))
+               (grammatical-edit-delete-region (treesit-node-start current-node) (treesit-node-end current-node)))
               ((string-equal current-node-bound-end "'''")
-               (grammatical-edit-delete-region (point) (- (tsc-node-end-position current-node) (length current-node-bound-end))))
+               (grammatical-edit-delete-region (point) (- (treesit-node-end current-node) (length current-node-bound-end))))
               (t
-               (grammatical-edit-delete-region (point) (- (tsc-node-end-position current-node) 1)))))
+               (grammatical-edit-delete-region (point) (- (treesit-node-end current-node) 1)))))
     (grammatical-edit-kill-line-in-string)))
 
 (defun grammatical-edit-kill-line-in-string ()
@@ -862,7 +864,7 @@ When in comment, kill to the beginning of the line."
            limit))
 
 (defun grammatical-edit-kill-before-in-string ()
-  (grammatical-edit-delete-region (point) (1+ (tsc-node-start-position (tree-sitter-node-at-pos)))))
+  (grammatical-edit-delete-region (point) (1+ (treesit-node-start (treesit-node-at (point))))))
 
 (defun grammatical-edit-skip-whitespace (trailing-p &optional limit)
   (funcall (if trailing-p #'skip-chars-forward #'skip-chars-backward)
@@ -977,11 +979,12 @@ When in comment, kill to the beginning of the line."
     (grammatical-edit-backward-kill-internal)))
 
 (defun grammatical-edit-kill-parent-node ()
-  (let ((range (tsc-node-position-range (tsc-get-parent (tree-sitter-node-at-pos)))))
-    (grammatical-edit-delete-region (car range) (cdr range))))
+  (let ((start (treesit-node-start (treesit-node-parent (treesit-node-at (point)))))
+	(end (treesit-node-end (treesit-node-parent (treesit-node-at (point))))))
+    (grammatical-edit-delete-region start end)))
 
 (defun grammatical-edit-kill-grandfather-node ()
-  (let ((range (tsc-node-position-range (tsc-get-parent (tsc-get-parent (tree-sitter-node-at-pos))))))
+  (let ((range (tsc-node-position-range (treesit-node-parent (treesit-node-parent (treesit-node-at (point)))))))
     (grammatical-edit-delete-region (car range) (cdr range))))
 
 (defun grammatical-edit-kill-prepend-space ()
@@ -1003,7 +1006,7 @@ When in comment, kill to the beginning of the line."
     (cond
      ;; Kill from current point to attribute end position.
      ((eq (grammatical-edit-node-type-at-point) 'attribute_value)
-      (grammatical-edit-delete-region (point) (tsc-node-end-position (tree-sitter-node-at-pos))))
+      (grammatical-edit-delete-region (point) (treesit-node-end (treesit-node-at (point)))))
 
      ;; Kill parent node if cursor at attribute or directive node.
      ((or (eq (grammatical-edit-node-type-at-point) 'attribute_name)
@@ -1089,7 +1092,7 @@ When in comment, kill to the beginning of the line."
   (back-to-indentation))
 
 (defun grammatical-edit-indent-parent-area ()
-  (let ((range (tsc-node-position-range (tsc-get-parent (tree-sitter-node-at-pos)))))
+  (let ((range (tsc-node-position-range (treesit-node-parent (treesit-node-at (point))))))
     (indent-region (car range) (cdr range))))
 
 (defun grammatical-edit-equal ()
@@ -1238,7 +1241,7 @@ A and B are strings."
                         (max (point) point))))
 
 (defun grammatical-edit-current-node-range ()
-  (tsc-node-position-range (tree-sitter-node-at-pos)))
+  (tsc-node-position-range (treesit-node-at (point))))
 
 (defun grammatical-edit-after-open-pair-p ()
   (unless (bobp)
@@ -1286,15 +1289,15 @@ A and B are strings."
                )))))
 
 (defun grammatical-edit-node-type-at-point ()
-  (ignore-errors (tsc-node-type (tree-sitter-node-at-pos))))
+  (ignore-errors (treesit-node-type (treesit-node-at (point)))))
 
 (defun grammatical-edit-in-string-p ()
   (ignore-errors
     (or
      ;; If node type is 'string, point must at right of string open quote.
-     (let ((current-node (tree-sitter-node-at-pos)))
+     (let ((current-node (treesit-node-at (point))))
        (and (grammatical-edit-is-string-node-p current-node)
-            (> (point) (tsc-node-start-position current-node))))
+            (> (point) (treesit-node-start current-node))))
 
      (nth 3 (grammatical-edit-current-parse-state))
 
@@ -1302,19 +1305,19 @@ A and B are strings."
 
 (defun grammatical-edit-in-single-quote-string-p ()
   (ignore-errors
-    (let ((parent-node-text (tsc-node-text (tsc-get-parent (tree-sitter-node-at-pos)))))
+    (let ((parent-node-text (treesit-node-text (treesit-node-parent (treesit-node-at (point))))))
       (and (grammatical-edit-in-string-p)
            (> (length parent-node-text) 1)
            (string-equal (substring parent-node-text 0 1) "'")))))
 
 (defun grammatical-edit-before-string-close-quote-p ()
-  (let ((current-node (tree-sitter-node-at-pos)))
+  (let ((current-node (treesit-node-at (point))))
     (and
-     (= (point) (tsc-node-start-position current-node))
-     (string-equal (tsc-node-type current-node) "\"")
+     (= (point) (treesit-node-start current-node))
+     (string-equal (treesit-node-type current-node) "\"")
      (save-excursion
-       (forward-char (length (tsc-node-text current-node)))
-       (not (grammatical-edit-is-string-node-p (tree-sitter-node-at-pos)))
+       (forward-char (length (treesit-node-text current-node)))
+       (not (grammatical-edit-is-string-node-p (treesit-node-at (point))))
        ))))
 
 (defun grammatical-edit-after-open-quote-p ()
@@ -1385,10 +1388,10 @@ A and B are strings."
 
 (defun grammatical-edit-jump-up ()
   (interactive)
-  (let* ((current-node (tree-sitter-node-at-pos))
-         (parent-node (tsc-get-parent current-node)))
+  (let* ((current-node (treesit-node-at (point)))
+         (parent-node (treesit-node-parent current-node)))
     (if parent-node
-        (let ((parent-node-start-position (tsc-node-start-position parent-node)))
+        (let ((parent-node-start-position (treesit-node-start parent-node)))
           (if (equal parent-node-start-position (point))
               (progn
                 (backward-char)
